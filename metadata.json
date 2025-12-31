@@ -1,0 +1,7 @@
+{
+  "name": "OmniChannel Analytics Dashboard",
+  "description": "A sophisticated marketing and performance dashboard aggregating data from Google Ads, Meta Ads, and Google Analytics with AI-driven insights powered by Gemini.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
