@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   BarChart, Bar, LineChart, Line, Cell, PieChart, Pie, ScatterChart, Scatter, ZAxis,
@@ -12,15 +12,21 @@ import {
   AlertCircle, DollarSign, Sparkles, Plus, MoreHorizontal, X, User,
   MousePointer2, BarChart3, Layers, ArrowUpRight, ArrowDownRight,
   TrendingDown, Info, Link as LinkIcon, Clock, Send, Bot, FileText, ChevronRight,
-  ShieldCheck, Unlink, RefreshCw, ShoppingBag, ArrowLeft
+  ShieldCheck, Unlink, RefreshCw, ShoppingBag, ArrowLeft, Loader2
 } from 'lucide-react';
 import { 
   PERFORMANCE_METRICS, CHART_DATA, CALENDAR_DATA, CORE_WEB_VITALS, 
-  SEO_METRICS, COMPETITORS, LEAD_GEOGRAPHY, CAMPAIGNS, LTV_COHORTS,
-  REPORTING_DATA, INTEGRATIONS
+  SEO_METRICS, COMPETITORS, LEAD_GEOGRAPHY, CAMPAIGNS as MOCK_CAMPAIGNS, LTV_COHORTS,
+  REPORTING_DATA, INTEGRATIONS as MOCK_INTEGRATIONS
 } from './mockData';
-import { getAdvancedInsights, chatWithMarketingAI } from './services/geminiService';
 import { AIInsight, DashboardView, ChatMessage, Campaign, Integration } from './types';
+import { 
+  fetchDashboardData, fetchIntegrations, fetchAIInsights, chatWithAI, 
+  triggerSync, checkApiHealth, DashboardData, DashboardCampaign,
+  type Integration as ApiIntegration
+} from './services/api';
+import { LoadingSpinner, Skeleton, CardSkeleton, ChartSkeleton, TableSkeleton } from './components/LoadingSpinner';
+import { useErrorToast } from './components/ErrorToast';
 
 const App: React.FC = () => {
   const [domain, setDomain] = useState('omnichannel-analytics.io');
@@ -31,16 +37,76 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  
+  // API State
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+  
+  const { showError, ErrorComponent } = useErrorToast();
 
+  // Check API health on mount
+  useEffect(() => {
+    checkApiHealth().then(setApiConnected);
+  }, []);
+
+  // Fetch dashboard data
+  const loadDashboardData = useCallback(async () => {
+    setLoadingDashboard(true);
+    try {
+      const data = await fetchDashboardData(30);
+      setDashboardData(data);
+    } catch (err) {
+      console.error('Failed to fetch dashboard data:', err);
+      // Fall back to mock data
+      setDashboardData(null);
+    } finally {
+      setLoadingDashboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (apiConnected) {
+      loadDashboardData();
+    } else if (apiConnected === false) {
+      setLoadingDashboard(false);
+    }
+  }, [apiConnected, loadDashboardData]);
+
+  // Fetch AI insights
   useEffect(() => {
     const fetchAI = async () => {
       setLoadingInsights(true);
-      const res = await getAdvancedInsights(domain, { metrics: PERFORMANCE_METRICS, campaigns: CAMPAIGNS });
-      setInsights(res);
-      setLoadingInsights(false);
+      try {
+        if (apiConnected) {
+          const metrics = dashboardData?.metrics || PERFORMANCE_METRICS.map(m => ({
+            label: m.label,
+            value: String(m.value),
+            change: m.change,
+          }));
+          const campaigns = (dashboardData?.campaigns || MOCK_CAMPAIGNS).map(c => ({
+            name: c.name,
+            spend: c.spend,
+            revenue: c.revenue,
+            roas: c.roas,
+          }));
+          const res = await fetchAIInsights(domain, { metrics, campaigns });
+          setInsights(res);
+        } else {
+          // Use client-side Gemini as fallback
+          const { getAdvancedInsights } = await import('./services/geminiService');
+          const res = await getAdvancedInsights(domain, { metrics: PERFORMANCE_METRICS, campaigns: MOCK_CAMPAIGNS });
+          setInsights(res);
+        }
+      } catch (err) {
+        console.error('Failed to fetch insights:', err);
+        setInsights([]);
+      } finally {
+        setLoadingInsights(false);
+      }
     };
     fetchAI();
-  }, [domain]);
+  }, [domain, apiConnected, dashboardData]);
 
   const handleAIQuery = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -54,8 +120,20 @@ const App: React.FC = () => {
     setIsAiThinking(true);
 
     try {
-      // Updated to handle object response containing sources
-      const responseData = await chatWithMarketingAI(currentInput, { domain, metrics: PERFORMANCE_METRICS });
+      const metrics = dashboardData?.metrics || PERFORMANCE_METRICS.map(m => ({
+        label: m.label,
+        value: String(m.value),
+        change: m.change,
+      }));
+      
+      let responseData;
+      if (apiConnected) {
+        responseData = await chatWithAI(currentInput, { domain, metrics });
+      } else {
+        const { chatWithMarketingAI } = await import('./services/geminiService');
+        responseData = await chatWithMarketingAI(currentInput, { domain, metrics: PERFORMANCE_METRICS });
+      }
+      
       const assistantMsg: ChatMessage = { 
         role: 'assistant', 
         content: responseData.text, 
@@ -65,6 +143,7 @@ const App: React.FC = () => {
       setChatHistory(prev => [...prev, assistantMsg]);
     } catch (err) {
       console.error(err);
+      showError('Failed to get AI response. Please try again.');
       const errorMsg: ChatMessage = { role: 'assistant', content: "I encountered an error analyzing that data. Please try again.", timestamp: new Date() };
       setChatHistory(prev => [...prev, errorMsg]);
     } finally {
@@ -72,26 +151,47 @@ const App: React.FC = () => {
     }
   };
 
+  // Get data with fallback to mock
+  const metrics = dashboardData?.metrics || PERFORMANCE_METRICS;
+  const campaigns = dashboardData?.campaigns?.map(c => ({
+    ...c,
+    id: c.id,
+    name: c.name,
+    platform: c.platform as 'google' | 'meta',
+    status: c.status as 'active' | 'paused',
+    spend: c.spend,
+    revenue: c.revenue,
+    roas: c.roas,
+    conversions: c.conversions,
+  })) || MOCK_CAMPAIGNS;
+  const chartData = dashboardData?.chart || CHART_DATA;
+
   const renderContent = () => {
     if (selectedCampaign) {
       return <CampaignDetailView campaign={selectedCampaign} onBack={() => setSelectedCampaign(null)} />;
     }
 
     switch (activeView) {
-      case 'overview': return <OverviewView />;
-      case 'campaigns': return <CampaignsView onSelect={setSelectedCampaign} />;
+      case 'overview': return <OverviewView loading={loadingDashboard} chartData={chartData} />;
+      case 'campaigns': return <CampaignsView campaigns={campaigns} loading={loadingDashboard} onSelect={setSelectedCampaign} />;
       case 'seo': return <SEOView />;
       case 'ltv': return <LTVView />;
-      case 'forecast': return <ForecastView />;
+      case 'forecast': return <ForecastView chartData={chartData} />;
       case 'reporting': return <ReportingView />;
       case 'strategy': return <StrategyAIView history={chatHistory} isThinking={isAiThinking} />;
-      case 'connectors': return <ConnectorsView />;
-      default: return <OverviewView />;
+      case 'connectors': return <ConnectorsView apiConnected={apiConnected} showError={showError} />;
+      default: return <OverviewView loading={loadingDashboard} chartData={chartData} />;
     }
   };
 
+  // Calculate total revenue for display
+  const totalRevenue = dashboardData?.metrics?.find(m => m.label === 'Attributed Revenue')?.value || '$842,592';
+  const revenueChange = dashboardData?.metrics?.find(m => m.label === 'Attributed Revenue')?.change || 14.2;
+
   return (
     <div className="flex h-screen overflow-hidden text-white bg-[#0a0a0b]">
+      {ErrorComponent}
+      
       {/* SIDEBAR */}
       <aside className="w-[240px] border-r border-[#212124] bg-[#0a0a0b] flex flex-col p-6 shrink-0">
         <div className="flex items-center gap-2 mb-10 px-2 cursor-pointer" onClick={() => { setActiveView('overview'); setSelectedCampaign(null); }}>
@@ -146,8 +246,10 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-2 bg-[#141416] border border-[#212124] rounded-full px-3 py-1">
-               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-               <span className="text-[11px] font-bold uppercase tracking-widest">Attributing</span>
+               <span className={`w-2 h-2 rounded-full ${apiConnected ? 'bg-emerald-500' : apiConnected === false ? 'bg-amber-500' : 'bg-gray-500'} animate-pulse`}></span>
+               <span className="text-[11px] font-bold uppercase tracking-widest">
+                 {apiConnected ? 'Live' : apiConnected === false ? 'Demo' : 'Checking...'}
+               </span>
              </div>
              <Bell size={18} className="text-[#80808a] cursor-pointer hover:text-white" />
              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold shadow-[0_0_12px_rgba(79,70,229,0.3)]">MK</div>
@@ -170,8 +272,9 @@ const App: React.FC = () => {
                className="w-full bg-[#141416] border border-[#212124] rounded-xl py-2.5 pl-12 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-[#4a4a4f]"
              />
            </div>
-           <button type="submit" className="bg-white text-black text-sm font-bold px-8 py-2.5 rounded-xl hover:bg-slate-200 transition-all active:scale-95 shadow-lg flex items-center gap-2">
-             Analyze <Send size={14} />
+           <button type="submit" disabled={isAiThinking} className="bg-white text-black text-sm font-bold px-8 py-2.5 rounded-xl hover:bg-slate-200 transition-all active:scale-95 shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+             {isAiThinking ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+             Analyze
            </button>
         </form>
       </main>
@@ -291,68 +394,131 @@ const CampaignDetailView: React.FC<{ campaign: Campaign; onBack: () => void }> =
   </div>
 );
 
-const ConnectorsView: React.FC = () => (
-  <div className="space-y-12 animate-in fade-in duration-500">
-    <div>
-      <h3 className="text-2xl font-bold">Data Connectors</h3>
-      <p className="text-sm text-[#80808a]">Securely link your advertising and analytics accounts for real-time attribution.</p>
-    </div>
+const ConnectorsView: React.FC<{ apiConnected: boolean | null; showError: (msg: string) => void }> = ({ apiConnected, showError }) => {
+  const [integrations, setIntegrations] = useState<ApiIntegration[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState<string | null>(null);
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {INTEGRATIONS.map(int => (
-        <div key={int.id} className="origin-card p-6 flex flex-col justify-between hover:border-indigo-500/30 transition-all group">
-          <div className="flex items-start justify-between mb-8">
-            <div className={`p-3 rounded-2xl ${int.status === 'connected' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-[#141416] text-[#4a4a4f]'}`}>
-              {int.icon === 'google' ? <Globe size={24} /> : 
-               int.icon === 'facebook' ? <Facebook size={24} /> : 
-               int.icon === 'activity' ? <Activity size={24} /> : <ShoppingBag size={24} />}
-            </div>
-            <div className={`text-[9px] font-bold uppercase px-2 py-1 rounded-full border ${int.status === 'connected' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
-              {int.status}
-            </div>
-          </div>
-          
-          <div className="mb-8">
-            <h4 className="text-lg font-bold mb-1">{int.name}</h4>
-            <p className="text-xs text-[#80808a]">{int.status === 'connected' ? `Linked as ${int.accountName}` : 'No active connection found'}</p>
-          </div>
+  useEffect(() => {
+    const load = async () => {
+      if (apiConnected) {
+        try {
+          const data = await fetchIntegrations();
+          setIntegrations(data.integrations);
+        } catch (err) {
+          console.error('Failed to fetch integrations:', err);
+        }
+      }
+      setLoading(false);
+    };
+    load();
+  }, [apiConnected]);
 
-          <div className="flex items-center justify-between pt-6 border-t border-[#212124]">
-            <div className="text-[10px] text-[#4a4a4f] font-bold uppercase tracking-widest">
-              {int.status === 'connected' ? `Last sync: ${int.lastSync}` : 'Requires OAuth'}
+  const handleSync = async (id: string) => {
+    setSyncing(id);
+    try {
+      await triggerSync(id);
+      // Refresh integrations
+      const data = await fetchIntegrations();
+      setIntegrations(data.integrations);
+    } catch (err) {
+      showError('Failed to trigger sync. Please try again.');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const displayIntegrations = integrations.length > 0 ? integrations : MOCK_INTEGRATIONS;
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500">
+      <div>
+        <h3 className="text-2xl font-bold">Data Connectors</h3>
+        <p className="text-sm text-[#80808a]">Securely link your advertising and analytics accounts for real-time attribution.</p>
+        {!apiConnected && (
+          <p className="text-xs text-amber-500 mt-2">⚠️ Backend not connected. Showing demo data.</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {loading ? (
+          [1, 2, 3].map(i => <CardSkeleton key={i} />)
+        ) : (
+          displayIntegrations.map(int => (
+            <div key={int.id} className="origin-card p-6 flex flex-col justify-between hover:border-indigo-500/30 transition-all group">
+              <div className="flex items-start justify-between mb-8">
+                <div className={`p-3 rounded-2xl ${int.status === 'connected' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-[#141416] text-[#4a4a4f]'}`}>
+                  {int.icon === 'google' ? <Globe size={24} /> : 
+                   int.icon === 'facebook' ? <Facebook size={24} /> : 
+                   int.icon === 'activity' ? <Activity size={24} /> : <ShoppingBag size={24} />}
+                </div>
+                <div className={`text-[9px] font-bold uppercase px-2 py-1 rounded-full border ${
+                  int.status === 'connected' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 
+                  int.status === 'syncing' ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' :
+                  int.status === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' :
+                  'bg-red-500/10 border-red-500/20 text-red-500'
+                }`}>
+                  {int.status}
+                </div>
+              </div>
+              
+              <div className="mb-8">
+                <h4 className="text-lg font-bold mb-1">{int.name}</h4>
+                <p className="text-xs text-[#80808a]">{int.status === 'connected' ? `Linked as ${int.accountName}` : 'No active connection found'}</p>
+              </div>
+
+              <div className="flex items-center justify-between pt-6 border-t border-[#212124]">
+                <div className="text-[10px] text-[#4a4a4f] font-bold uppercase tracking-widest">
+                  {int.status === 'connected' ? `Last sync: ${int.lastSyncAt || 'Never'}` : 'Requires OAuth'}
+                </div>
+                {int.status === 'connected' ? (
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleSync(int.id)}
+                      disabled={syncing === int.id}
+                      className="text-indigo-400 hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {syncing === int.id ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    </button>
+                    <button className="text-[#80808a] hover:text-red-400 transition-colors"><Unlink size={16} /></button>
+                  </div>
+                ) : (
+                  <a 
+                    href={apiConnected ? `/api/auth/${int.icon}` : '#'}
+                    className="text-indigo-400 hover:text-white transition-colors flex items-center gap-1 text-[11px] font-bold"
+                  >
+                    Connect <ChevronRight size={14} />
+                  </a>
+                )}
+              </div>
             </div>
-            {int.status === 'connected' ? (
-              <button className="text-[#80808a] hover:text-red-400 transition-colors"><Unlink size={16} /></button>
-            ) : (
-              <button className="text-indigo-400 hover:text-white transition-colors flex items-center gap-1 text-[11px] font-bold">Connect <ChevronRight size={14} /></button>
-            )}
+          ))
+        )}
+        <div className="origin-card p-6 border-dashed border-[#212124] bg-transparent flex flex-col items-center justify-center text-center py-12 hover:border-indigo-500/50 transition-all group cursor-pointer">
+          <div className="w-12 h-12 rounded-full bg-[#141416] flex items-center justify-center mb-4 group-hover:bg-indigo-500/10 transition-colors">
+            <Plus size={24} className="text-[#4a4a4f] group-hover:text-indigo-400 transition-colors" />
+          </div>
+          <p className="text-sm font-bold text-[#4a4a4f] group-hover:text-white transition-colors">Add Custom Source</p>
+        </div>
+      </div>
+
+      <div className="origin-card p-8 bg-gradient-to-r from-indigo-500/5 to-transparent flex items-center justify-between border-indigo-500/10">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 rounded-3xl bg-indigo-500 flex items-center justify-center shadow-lg">
+            <ShieldCheck size={32} className="text-black" />
+          </div>
+          <div>
+            <h4 className="text-lg font-bold mb-1">Enterprise-Grade Security</h4>
+            <p className="text-sm text-[#80808a] max-w-md">Your API credentials are never stored. We use short-lived OAuth tokens and read-only access where possible.</p>
           </div>
         </div>
-      ))}
-      <div className="origin-card p-6 border-dashed border-[#212124] bg-transparent flex flex-col items-center justify-center text-center py-12 hover:border-indigo-500/50 transition-all group cursor-pointer">
-        <div className="w-12 h-12 rounded-full bg-[#141416] flex items-center justify-center mb-4 group-hover:bg-indigo-500/10 transition-colors">
-          <Plus size={24} className="text-[#4a4a4f] group-hover:text-indigo-400 transition-colors" />
-        </div>
-        <p className="text-sm font-bold text-[#4a4a4f] group-hover:text-white transition-colors">Add Custom Source</p>
+        <button className="bg-white text-black text-sm font-bold px-6 py-3 rounded-xl hover:bg-slate-200 transition-all">
+          Security Audit Logs
+        </button>
       </div>
     </div>
-
-    <div className="origin-card p-8 bg-gradient-to-r from-indigo-500/5 to-transparent flex items-center justify-between border-indigo-500/10">
-      <div className="flex items-center gap-6">
-        <div className="w-16 h-16 rounded-3xl bg-indigo-500 flex items-center justify-center shadow-lg">
-          <ShieldCheck size={32} className="text-black" />
-        </div>
-        <div>
-          <h4 className="text-lg font-bold mb-1">Enterprise-Grade Security</h4>
-          <p className="text-sm text-[#80808a] max-w-md">Your API credentials are never stored. We use short-lived OAuth tokens and read-only access where possible.</p>
-        </div>
-      </div>
-      <button className="bg-white text-black text-sm font-bold px-6 py-3 rounded-xl hover:bg-slate-200 transition-all">
-        Security Audit Logs
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 const StrategyAIView: React.FC<{ history: ChatMessage[], isThinking: boolean }> = ({ history, isThinking }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -388,7 +554,6 @@ const StrategyAIView: React.FC<{ history: ChatMessage[], isThinking: boolean }> 
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{msg.content}</p>
               
-              {/* Added to display search sources as per grounding guidelines */}
               {msg.sources && msg.sources.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-indigo-500/10">
                   <p className="text-[10px] font-bold text-[#80808a] uppercase mb-2 tracking-widest">Sources & Grounding</p>
@@ -514,7 +679,12 @@ const StatItem = ({ label, value, sub }: { label: string, value: string, sub: st
   </div>
 );
 
-const OverviewView: React.FC = () => {
+interface OverviewViewProps {
+  loading: boolean;
+  chartData: Array<{ date: string; value: number; spend?: number }>;
+}
+
+const OverviewView: React.FC<OverviewViewProps> = ({ loading, chartData }) => {
   const weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   
   return (
@@ -523,26 +693,39 @@ const OverviewView: React.FC = () => {
         <p className="text-[10px] font-bold text-[#80808a] uppercase tracking-widest mb-2">TOTAL ATTRIBUTED REVENUE</p>
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-4xl font-bold tracking-tight">$842,592</h2>
-            <p className="text-emerald-500 font-bold text-sm mt-1 flex items-center gap-1">
-              <TrendingUp size={14} /> +14.2% vs last month
-            </p>
+            {loading ? (
+              <>
+                <Skeleton className="h-10 w-48 mb-2" />
+                <Skeleton className="h-5 w-32" />
+              </>
+            ) : (
+              <>
+                <h2 className="text-4xl font-bold tracking-tight">$842,592</h2>
+                <p className="text-emerald-500 font-bold text-sm mt-1 flex items-center gap-1">
+                  <TrendingUp size={14} /> +14.2% vs last month
+                </p>
+              </>
+            )}
           </div>
         </div>
-        <div className="h-[240px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={CHART_DATA}>
-              <defs>
-                <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorVal)" className="chart-glow" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        {loading ? (
+          <ChartSkeleton />
+        ) : (
+          <div className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorVal)" className="chart-glow" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -594,7 +777,13 @@ const OverviewView: React.FC = () => {
   );
 };
 
-const CampaignsView: React.FC<{ onSelect: (c: Campaign) => void }> = ({ onSelect }) => (
+interface CampaignsViewProps {
+  campaigns: Campaign[];
+  loading: boolean;
+  onSelect: (c: Campaign) => void;
+}
+
+const CampaignsView: React.FC<CampaignsViewProps> = ({ campaigns, loading, onSelect }) => (
   <section className="space-y-8 animate-in slide-in-from-right-4 duration-500">
     <div className="flex items-center justify-between">
       <h3 className="text-2xl font-bold">Ad Campaigns</h3>
@@ -603,24 +792,28 @@ const CampaignsView: React.FC<{ onSelect: (c: Campaign) => void }> = ({ onSelect
         <button className="px-4 py-2 bg-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-700">Add Campaign</button>
       </div>
     </div>
-    <div className="origin-card overflow-hidden">
-      <table className="w-full text-left">
-        <thead className="bg-[#141416] text-[#80808a] text-[10px] uppercase font-bold tracking-widest">
-          <tr><th className="px-6 py-4">Name</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Spend</th><th className="px-6 py-4">Revenue</th><th className="px-6 py-4 text-right">ROAS</th></tr>
-        </thead>
-        <tbody className="divide-y divide-[#212124]">
-          {CAMPAIGNS.map(c => (
-            <tr key={c.id} onClick={() => onSelect(c)} className="hover:bg-[#141416] transition-colors cursor-pointer group">
-              <td className="px-6 py-4 text-sm font-bold group-hover:text-indigo-400 transition-colors">{c.name}</td>
-              <td className="px-6 py-4"><span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${c.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{c.status}</span></td>
-              <td className="px-6 py-4 text-sm">${c.spend.toLocaleString()}</td>
-              <td className="px-6 py-4 text-sm font-bold">${c.revenue.toLocaleString()}</td>
-              <td className={`px-6 py-4 text-sm text-right font-bold ${c.roas > 4 ? 'text-emerald-500' : 'text-amber-500'}`}>{c.roas}x</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    {loading ? (
+      <TableSkeleton rows={5} />
+    ) : (
+      <div className="origin-card overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-[#141416] text-[#80808a] text-[10px] uppercase font-bold tracking-widest">
+            <tr><th className="px-6 py-4">Name</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Spend</th><th className="px-6 py-4">Revenue</th><th className="px-6 py-4 text-right">ROAS</th></tr>
+          </thead>
+          <tbody className="divide-y divide-[#212124]">
+            {campaigns.map(c => (
+              <tr key={c.id} onClick={() => onSelect(c)} className="hover:bg-[#141416] transition-colors cursor-pointer group">
+                <td className="px-6 py-4 text-sm font-bold group-hover:text-indigo-400 transition-colors">{c.name}</td>
+                <td className="px-6 py-4"><span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${c.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{c.status}</span></td>
+                <td className="px-6 py-4 text-sm">${c.spend.toLocaleString()}</td>
+                <td className="px-6 py-4 text-sm font-bold">${c.revenue.toLocaleString()}</td>
+                <td className={`px-6 py-4 text-sm text-right font-bold ${c.roas > 4 ? 'text-emerald-500' : 'text-amber-500'}`}>{c.roas}x</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </section>
 );
 
@@ -648,12 +841,16 @@ const SEOView: React.FC = () => (
   </section>
 );
 
-const ForecastView: React.FC = () => {
+interface ForecastViewProps {
+  chartData: Array<{ date: string; value: number; spend?: number }>;
+}
+
+const ForecastView: React.FC<ForecastViewProps> = ({ chartData }) => {
   const [growthFactor, setGrowthFactor] = useState(1.15);
   return (
     <section className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between"><div><h3 className="text-2xl font-bold">Revenue Forecasting</h3><p className="text-sm text-[#80808a]">Predictive modelling based on current ROAS trends</p></div><div className="flex items-center gap-4 bg-[#141416] p-4 rounded-xl border border-[#212124]"><span className="text-[10px] font-bold text-[#80808a] uppercase">Simulate Ad Boost:</span><input type="range" min="0.8" max="2" step="0.05" value={growthFactor} onChange={(e) => setGrowthFactor(parseFloat(e.target.value))} className="accent-indigo-500" /><span className="text-xs font-bold text-indigo-400">{(growthFactor * 100 - 100).toFixed(0)}%</span></div></div>
-      <div className="origin-card p-8"><div className="h-[400px]"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={CHART_DATA}><XAxis dataKey="date" stroke="#4a4a4f" fontSize={10} axisLine={false} tickLine={false} /><YAxis hide /><Tooltip contentStyle={{ backgroundColor: '#0a0a0b', border: '1px solid #212124' }} /><Area type="monotone" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.05} /><Line type="monotone" dataKey={(v) => v.value * growthFactor} stroke="#6366f1" strokeDasharray="5 5" strokeWidth={2} dot={false} name="Forecasted Revenue" /></ComposedChart></ResponsiveContainer></div></div>
+      <div className="origin-card p-8"><div className="h-[400px]"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={chartData}><XAxis dataKey="date" stroke="#4a4a4f" fontSize={10} axisLine={false} tickLine={false} /><YAxis hide /><Tooltip contentStyle={{ backgroundColor: '#0a0a0b', border: '1px solid #212124' }} /><Area type="monotone" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.05} /><Line type="monotone" dataKey={(v) => v.value * growthFactor} stroke="#6366f1" strokeDasharray="5 5" strokeWidth={2} dot={false} name="Forecasted Revenue" /></ComposedChart></ResponsiveContainer></div></div>
     </section>
   );
 };
