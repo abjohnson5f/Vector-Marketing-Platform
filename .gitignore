@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files (NEVER commit these!)
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/env.example
