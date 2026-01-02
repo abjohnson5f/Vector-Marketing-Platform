@@ -28,7 +28,7 @@ const META_SCOPES = [
 // ============== Google OAuth ==============
 
 auth.get('/google', async (c) => {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_OAUTH_REDIRECT) {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_REDIRECT_URI) {
     throw new ValidationError('Google OAuth is not configured');
   }
   
@@ -37,7 +37,7 @@ auth.get('/google', async (c) => {
   
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri', env.GOOGLE_OAUTH_REDIRECT);
+  authUrl.searchParams.set('redirect_uri', env.GOOGLE_REDIRECT_URI);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', GOOGLE_SCOPES);
   authUrl.searchParams.set('access_type', 'offline');
@@ -60,7 +60,7 @@ auth.get('/google/callback', async (c) => {
     throw new ValidationError('Missing authorization code');
   }
   
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_OAUTH_REDIRECT) {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
     throw new ValidationError('Google OAuth is not configured');
   }
   
@@ -73,7 +73,7 @@ auth.get('/google/callback', async (c) => {
         code,
         client_id: env.GOOGLE_CLIENT_ID,
         client_secret: env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: env.GOOGLE_OAUTH_REDIRECT,
+        redirect_uri: env.GOOGLE_REDIRECT_URI,
         grant_type: 'authorization_code',
       }),
     });
@@ -137,7 +137,7 @@ auth.get('/google/callback', async (c) => {
 // ============== Meta OAuth ==============
 
 auth.get('/meta', async (c) => {
-  if (!env.META_APP_ID || !env.META_OAUTH_REDIRECT) {
+  if (!env.META_APP_ID || !env.META_REDIRECT_URI) {
     throw new ValidationError('Meta OAuth is not configured');
   }
   
@@ -145,7 +145,7 @@ auth.get('/meta', async (c) => {
   
   const authUrl = new URL('https://www.facebook.com/v19.0/dialog/oauth');
   authUrl.searchParams.set('client_id', env.META_APP_ID);
-  authUrl.searchParams.set('redirect_uri', env.META_OAUTH_REDIRECT);
+  authUrl.searchParams.set('redirect_uri', env.META_REDIRECT_URI);
   authUrl.searchParams.set('scope', META_SCOPES);
   authUrl.searchParams.set('state', state);
   
@@ -165,7 +165,7 @@ auth.get('/meta/callback', async (c) => {
     throw new ValidationError('Missing authorization code');
   }
   
-  if (!env.META_APP_ID || !env.META_APP_SECRET || !env.META_OAUTH_REDIRECT) {
+  if (!env.META_APP_ID || !env.META_APP_SECRET || !env.META_REDIRECT_URI) {
     throw new ValidationError('Meta OAuth is not configured');
   }
   
@@ -174,7 +174,7 @@ auth.get('/meta/callback', async (c) => {
     const tokenUrl = new URL('https://graph.facebook.com/v19.0/oauth/access_token');
     tokenUrl.searchParams.set('client_id', env.META_APP_ID);
     tokenUrl.searchParams.set('client_secret', env.META_APP_SECRET);
-    tokenUrl.searchParams.set('redirect_uri', env.META_OAUTH_REDIRECT);
+    tokenUrl.searchParams.set('redirect_uri', env.META_REDIRECT_URI);
     tokenUrl.searchParams.set('code', code);
     
     const tokenResponse = await fetch(tokenUrl.toString());
