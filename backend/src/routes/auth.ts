@@ -99,25 +99,23 @@ auth.get('/google/callback', async (c) => {
     const userInfo = await userResponse.json() as { email: string; name?: string };
     
     // Store integration
-    const integrationId = nanoid();
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     
     await db.insert(integrations).values({
-      id: integrationId,
       platform: 'google_ads',
       accountId: userInfo.email,
       accountName: userInfo.name || userInfo.email,
       status: 'connected',
       accessToken: encryptToken(tokens.access_token),
       refreshToken: tokens.refresh_token ? encryptToken(tokens.refresh_token) : null,
-      tokenExpiresAt: expiresAt,
+      accessTokenExpiresAt: expiresAt,
     }).onConflictDoUpdate({
       target: [integrations.platform, integrations.accountId],
       set: {
         status: 'connected',
         accessToken: encryptToken(tokens.access_token),
         refreshToken: tokens.refresh_token ? encryptToken(tokens.refresh_token) : undefined,
-        tokenExpiresAt: expiresAt,
+        accessTokenExpiresAt: expiresAt,
         updatedAt: new Date(),
       },
     });
@@ -211,26 +209,24 @@ auth.get('/meta/callback', async (c) => {
     const userInfo = await userResponse.json() as { id: string; name: string };
     
     // Store integration
-    const integrationId = nanoid();
     const expiresAt = longLivedTokens.expires_in 
       ? new Date(Date.now() + longLivedTokens.expires_in * 1000)
       : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days default
     
     await db.insert(integrations).values({
-      id: integrationId,
       platform: 'meta_ads',
       accountId: userInfo.id,
       accountName: userInfo.name,
       status: 'connected',
       accessToken: encryptToken(longLivedTokens.access_token),
       refreshToken: null,
-      tokenExpiresAt: expiresAt,
+      accessTokenExpiresAt: expiresAt,
     }).onConflictDoUpdate({
       target: [integrations.platform, integrations.accountId],
       set: {
         status: 'connected',
         accessToken: encryptToken(longLivedTokens.access_token),
-        tokenExpiresAt: expiresAt,
+        accessTokenExpiresAt: expiresAt,
         updatedAt: new Date(),
       },
     });
