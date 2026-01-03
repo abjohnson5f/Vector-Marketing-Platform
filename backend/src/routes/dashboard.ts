@@ -271,7 +271,7 @@ dashboard.get('/campaigns/:id', async (c) => {
       cpa: totals.conversions > 0 ? Number((totals.spend / totals.conversions).toFixed(2)) : 0,
     },
     dailyTrend: stats.map(s => ({
-      date: s.date.toISOString().split('T')[0],
+      date: s.statDate ? new Date(s.statDate).toISOString().split('T')[0] : '',
       impressions: s.impressions,
       clicks: s.clicks,
       spend: Number(s.spend),

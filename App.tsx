@@ -151,20 +151,22 @@ const App: React.FC = () => {
     }
   };
 
-  // Get data with fallback to mock
-  const metrics = dashboardData?.metrics || PERFORMANCE_METRICS;
-  const campaigns = dashboardData?.campaigns?.map(c => ({
-    ...c,
-    id: c.id,
-    name: c.name,
-    platform: c.platform as 'google' | 'meta',
-    status: c.status as 'active' | 'paused',
-    spend: c.spend,
-    revenue: c.revenue,
-    roas: c.roas,
-    conversions: c.conversions,
-  })) || MOCK_CAMPAIGNS;
-  const chartData = dashboardData?.chart || CHART_DATA;
+  // Get data with fallback to mock (handle empty arrays)
+  const metrics = dashboardData?.metrics?.length ? dashboardData.metrics : PERFORMANCE_METRICS;
+  const campaigns = dashboardData?.campaigns?.length 
+    ? dashboardData.campaigns.map(c => ({
+        ...c,
+        id: c.id,
+        name: c.name,
+        platform: c.platform as 'google' | 'meta',
+        status: c.status as 'active' | 'paused',
+        spend: c.spend,
+        revenue: c.revenue,
+        roas: c.roas,
+        conversions: c.conversions,
+      })) 
+    : MOCK_CAMPAIGNS;
+  const chartData = dashboardData?.chart?.length ? dashboardData.chart : CHART_DATA;
 
   const renderContent = () => {
     if (selectedCampaign) {
