@@ -53,7 +53,28 @@ auth.get('/google/callback', async (c) => {
   
   if (error) {
     logger.error({ error }, 'Google OAuth error');
-    return c.redirect('/?error=google_auth_failed');
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #ff6b6b 0%, #c44569 100%); }
+            .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; max-width: 400px; }
+            .icon { font-size: 4rem; margin-bottom: 1rem; }
+            h1 { color: #1a1a2e; margin: 0 0 0.5rem; }
+            p { color: #666; margin: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon">❌</div>
+            <h1>Connection Failed</h1>
+            <p>Google authentication was cancelled or failed. Please try again.</p>
+          </div>
+        </body>
+      </html>
+    `, 400);
   }
   
   if (!code) {
@@ -122,8 +143,31 @@ auth.get('/google/callback', async (c) => {
     
     logger.info({ email: userInfo.email }, 'Google OAuth connected');
     
-    // Redirect to frontend with success
-    return c.redirect('/?connected=google');
+    // Return success page (no frontend deployed yet)
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Google Connected</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+            .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; max-width: 400px; }
+            .icon { font-size: 4rem; margin-bottom: 1rem; }
+            h1 { color: #1a1a2e; margin: 0 0 0.5rem; }
+            p { color: #666; margin: 0; }
+            .account { background: #f0f4f8; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-top: 1.5rem; font-size: 0.9rem; color: #333; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon">✅</div>
+            <h1>Google Connected!</h1>
+            <p>Your Google Ads account has been linked successfully.</p>
+            <div class="account">${userInfo.name || userInfo.email}</div>
+          </div>
+        </body>
+      </html>
+    `);
     
   } catch (err) {
     logger.error({ error: err }, 'Google OAuth callback failed');
@@ -156,7 +200,28 @@ auth.get('/meta/callback', async (c) => {
   
   if (error) {
     logger.error({ error }, 'Meta OAuth error');
-    return c.redirect('/?error=meta_auth_failed');
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #ff6b6b 0%, #c44569 100%); }
+            .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; max-width: 400px; }
+            .icon { font-size: 4rem; margin-bottom: 1rem; }
+            h1 { color: #1a1a2e; margin: 0 0 0.5rem; }
+            p { color: #666; margin: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon">❌</div>
+            <h1>Connection Failed</h1>
+            <p>Meta authentication was cancelled or failed. Please try again.</p>
+          </div>
+        </body>
+      </html>
+    `, 400);
   }
   
   if (!code) {
@@ -233,7 +298,31 @@ auth.get('/meta/callback', async (c) => {
     
     logger.info({ userId: userInfo.id, name: userInfo.name }, 'Meta OAuth connected');
     
-    return c.redirect('/?connected=meta');
+    // Return success page (no frontend deployed yet)
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Meta Connected</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+            .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; max-width: 400px; }
+            .icon { font-size: 4rem; margin-bottom: 1rem; }
+            h1 { color: #1a1a2e; margin: 0 0 0.5rem; }
+            p { color: #666; margin: 0; }
+            .account { background: #f0f4f8; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-top: 1.5rem; font-size: 0.9rem; color: #333; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon">✅</div>
+            <h1>Meta Connected!</h1>
+            <p>Your Meta Ads account has been linked successfully.</p>
+            <div class="account">${userInfo.name}</div>
+          </div>
+        </body>
+      </html>
+    `);
     
   } catch (err) {
     logger.error({ error: err }, 'Meta OAuth callback failed');
