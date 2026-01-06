@@ -23,10 +23,14 @@ import { AIInsight, DashboardView, ChatMessage, Campaign, Integration } from './
 import { 
   fetchDashboardData, fetchIntegrations, fetchAIInsights, chatWithAI, 
   triggerSync, checkApiHealth, DashboardData, DashboardCampaign,
-  type Integration as ApiIntegration
+  fetchSEOKeywords, fetchSEOSummary, fetchWebVitalsSummary,
+  safeNumber, formatNumber,
+  type Integration as ApiIntegration, type SEOKeyword, type SEOSummary
 } from './services/api';
 import { LoadingSpinner, Skeleton, CardSkeleton, ChartSkeleton, TableSkeleton } from './components/LoadingSpinner';
 import { useErrorToast } from './components/ErrorToast';
+import { ConsentBanner } from './components/ConsentBanner';
+import { trackViewChange, trackCampaignView, trackAIInteraction, trackPageView } from './services/tracking';
 
 const App: React.FC = () => {
   const [domain, setDomain] = useState('omnichannel-analytics.io');
@@ -48,6 +52,12 @@ const App: React.FC = () => {
   // Check API health on mount
   useEffect(() => {
     checkApiHealth().then(setApiConnected);
+    // Track initial page view
+    trackPageView({
+      page_title: 'Dashboard',
+      page_location: window.location.href,
+      page_path: window.location.pathname,
+    });
   }, []);
 
   // Fetch dashboard data
@@ -141,6 +151,9 @@ const App: React.FC = () => {
         sources: responseData.sources 
       };
       setChatHistory(prev => [...prev, assistantMsg]);
+      
+      // Track AI interaction
+      trackAIInteraction(currentInput, responseData.text.length);
     } catch (err) {
       console.error(err);
       showError('Failed to get AI response. Please try again.');
@@ -190,9 +203,15 @@ const App: React.FC = () => {
   const totalRevenue = dashboardData?.metrics?.find(m => m.label === 'Attributed Revenue')?.value || '$842,592';
   const revenueChange = dashboardData?.metrics?.find(m => m.label === 'Attributed Revenue')?.change || 14.2;
 
+  // Track view changes
+  useEffect(() => {
+    trackViewChange(activeView);
+  }, [activeView]);
+
   return (
     <div className="flex h-screen overflow-hidden text-white bg-[#0a0a0b]">
       {ErrorComponent}
+      <ConsentBanner />
       
       {/* SIDEBAR */}
       <aside className="w-[240px] border-r border-[#212124] bg-[#0a0a0b] flex flex-col p-6 shrink-0">
@@ -341,7 +360,13 @@ const App: React.FC = () => {
 
 /* --- SUB-VIEWS --- */
 
-const CampaignDetailView: React.FC<{ campaign: Campaign; onBack: () => void }> = ({ campaign, onBack }) => (
+const CampaignDetailView: React.FC<{ campaign: Campaign; onBack: () => void }> = ({ campaign, onBack }) => {
+  // Track campaign view on mount
+  useEffect(() => {
+    trackCampaignView(campaign.id, campaign.name, campaign.platform);
+  }, [campaign.id, campaign.name, campaign.platform]);
+
+  return (
   <div className="space-y-8 animate-in slide-in-from-right-8 duration-500">
     <button onClick={onBack} className="flex items-center gap-2 text-[#80808a] hover:text-white transition-colors mb-4 group">
       <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -395,6 +420,7 @@ const CampaignDetailView: React.FC<{ campaign: Campaign; onBack: () => void }> =
     </div>
   </div>
 );
+};
 
 const ConnectorsView: React.FC<{ apiConnected: boolean | null; showError: (msg: string) => void }> = ({ apiConnected, showError }) => {
   const [integrations, setIntegrations] = useState<ApiIntegration[]>([]);
@@ -833,15 +859,113 @@ const LTVView: React.FC = () => (
   </section>
 );
 
-const SEOView: React.FC = () => (
+const SEOView: React.FC = () => {
+  const [seoKeywords, setSeoKeywords] = useState<SEOKeyword[]>([]);
+  const [seoSummary, setSeoSummary] = useState<SEOSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSEOData = async () => {
+      setLoading(true);
+      try {
+        const [keywordsRes, summaryRes] = await Promise.all([
+          fetchSEOKeywords(30),
+          fetchSEOSummary(30)
+        ]);
+        setSeoKeywords(keywordsRes.keywords);
+        setSeoSummary(summaryRes.summary);
+      } catch (err) {
+        console.error('Failed to fetch SEO data:', err);
+        // Keep using mock data if API fails
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSEOData();
+  }, []);
+
+  // Use API data if available, fallback to mock
+  const displayKeywords = seoKeywords.length > 0 
+    ? seoKeywords.map(k => ({
+        keyword: k.keyword,
+        volume: safeNumber(k.impressions),
+        position: Math.round(safeNumber(k.averagePosition)),
+        change: 0, // API doesn't provide change yet
+        difficulty: 50 // Default difficulty
+      }))
+    : SEO_METRICS;
+
+  return (
   <section className="space-y-8 animate-in slide-in-from-left-4 duration-500">
-    <div className="flex items-center justify-between"><div><h3 className="text-2xl font-bold">SEO Strategy</h3><p className="text-sm text-[#80808a]">Analyzing search intent and authority scores</p></div><div className="origin-card px-4 py-2 border-emerald-500/20"><p className="text-[10px] font-bold text-[#80808a] uppercase">Authority Score</p><p className="text-sm font-bold text-emerald-500">64/100</p></div></div>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="origin-card p-6 overflow-hidden"><h4 className="text-sm font-bold uppercase tracking-widest text-[#80808a] mb-6">Master Keyword Monitor</h4><div className="space-y-4">{SEO_METRICS.map(seo => (<div key={seo.keyword} className="flex items-center justify-between pb-4 border-b border-[#212124] last:border-0 group cursor-default"><div><p className="text-sm font-bold group-hover:text-indigo-400 transition-colors">{seo.keyword}</p><p className="text-[10px] text-[#4a4a4f] uppercase font-bold">Vol: {seo.volume.toLocaleString()}</p></div><div className="text-right"><p className="text-sm font-bold text-white">#{seo.position}</p><p className={`text-[10px] font-bold ${seo.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{seo.change >= 0 ? `+${seo.change}` : seo.change}</p></div></div>))}</div></div>
-      <div className="origin-card p-6"><h4 className="text-sm font-bold uppercase tracking-widest text-[#80808a] mb-6">Traffic Intensity Matrix</h4><div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><ScatterChart><XAxis dataKey="volume" hide /><YAxis dataKey="position" reversed stroke="#80808a" fontSize={10} /><ZAxis dataKey="difficulty" range={[50, 400]} /><Tooltip /><Scatter data={SEO_METRICS} fill="#6366f1" /></ScatterChart></ResponsiveContainer></div></div>
+    <div className="flex items-center justify-between">
+      <div>
+        <h3 className="text-2xl font-bold">SEO Strategy</h3>
+        <p className="text-sm text-[#80808a]">Analyzing search intent and authority scores</p>
+      </div>
+      <div className="flex gap-4">
+        {seoSummary && (
+          <>
+            <div className="origin-card px-4 py-2">
+              <p className="text-[10px] font-bold text-[#80808a] uppercase">Total Clicks</p>
+              <p className="text-sm font-bold text-indigo-400">{formatNumber(seoSummary.totalClicks)}</p>
+            </div>
+            <div className="origin-card px-4 py-2">
+              <p className="text-[10px] font-bold text-[#80808a] uppercase">Impressions</p>
+              <p className="text-sm font-bold text-white">{formatNumber(seoSummary.totalImpressions)}</p>
+            </div>
+          </>
+        )}
+        <div className="origin-card px-4 py-2 border-emerald-500/20">
+          <p className="text-[10px] font-bold text-[#80808a] uppercase">Avg Position</p>
+          <p className="text-sm font-bold text-emerald-500">#{seoSummary ? Math.round(safeNumber(seoSummary.averagePosition)) : 12}</p>
+        </div>
+      </div>
     </div>
+    {loading ? (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    ) : (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="origin-card p-6 overflow-hidden">
+        <h4 className="text-sm font-bold uppercase tracking-widest text-[#80808a] mb-6">Master Keyword Monitor</h4>
+        <div className="space-y-4">
+          {displayKeywords.map(seo => (
+            <div key={seo.keyword} className="flex items-center justify-between pb-4 border-b border-[#212124] last:border-0 group cursor-default">
+              <div>
+                <p className="text-sm font-bold group-hover:text-indigo-400 transition-colors">{seo.keyword}</p>
+                <p className="text-[10px] text-[#4a4a4f] uppercase font-bold">Vol: {seo.volume.toLocaleString()}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-white">#{seo.position}</p>
+                <p className={`text-[10px] font-bold ${seo.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {seo.change >= 0 ? `+${seo.change}` : seo.change}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="origin-card p-6">
+        <h4 className="text-sm font-bold uppercase tracking-widest text-[#80808a] mb-6">Traffic Intensity Matrix</h4>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart>
+              <XAxis dataKey="volume" hide />
+              <YAxis dataKey="position" reversed stroke="#80808a" fontSize={10} />
+              <ZAxis dataKey="difficulty" range={[50, 400]} />
+              <Tooltip />
+              <Scatter data={displayKeywords} fill="#6366f1" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+    )}
   </section>
 );
+};
 
 interface ForecastViewProps {
   chartData: Array<{ date: string; value: number; spend?: number }>;

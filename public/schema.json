@@ -1,0 +1,203 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "LocalBusiness",
+      "@id": "https://stiltnerlandscapes.com/#business",
+      "name": "Stiltner Landscapes",
+      "description": "Professional landscaping services including landscape design, hardscaping, lawn care, irrigation systems, outdoor lighting, and tree services.",
+      "url": "https://stiltnerlandscapes.com",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://stiltnerlandscapes.com/images/logo.png",
+        "width": 300,
+        "height": 100
+      },
+      "image": [
+        "https://stiltnerlandscapes.com/images/hero-landscape.jpg",
+        "https://stiltnerlandscapes.com/images/portfolio-1.jpg",
+        "https://stiltnerlandscapes.com/images/portfolio-2.jpg"
+      ],
+      "telephone": "+1-XXX-XXX-XXXX",
+      "email": "info@stiltnerlandscapes.com",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "123 Main Street",
+        "addressLocality": "Your City",
+        "addressRegion": "Your State",
+        "postalCode": "12345",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "XX.XXXXX",
+        "longitude": "-XX.XXXXX"
+      },
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          "opens": "08:00",
+          "closes": "18:00"
+        },
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": "Saturday",
+          "opens": "09:00",
+          "closes": "14:00"
+        }
+      ],
+      "priceRange": "$$",
+      "currenciesAccepted": "USD",
+      "paymentAccepted": "Cash, Credit Card, Check",
+      "areaServed": {
+        "@type": "GeoCircle",
+        "geoMidpoint": {
+          "@type": "GeoCoordinates",
+          "latitude": "XX.XXXXX",
+          "longitude": "-XX.XXXXX"
+        },
+        "geoRadius": "50 mi"
+      },
+      "sameAs": [
+        "https://www.facebook.com/stiltnerlandscapes",
+        "https://www.instagram.com/stiltnerlandscapes",
+        "https://www.yelp.com/biz/stiltner-landscapes"
+      ],
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "reviewCount": "47",
+        "bestRating": "5",
+        "worstRating": "1"
+      },
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Landscaping Services",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Landscape Design",
+              "description": "Custom landscape design and planning services"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Hardscaping",
+              "description": "Patios, walkways, retaining walls, and outdoor structures"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Lawn Care",
+              "description": "Professional lawn maintenance and care services"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Irrigation Systems",
+              "description": "Sprinkler installation and irrigation system design"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Outdoor Lighting",
+              "description": "Landscape lighting design and installation"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Tree Services",
+              "description": "Tree trimming, removal, and planting services"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://stiltnerlandscapes.com/#website",
+      "url": "https://stiltnerlandscapes.com",
+      "name": "Stiltner Landscapes",
+      "description": "Professional Landscaping Services",
+      "publisher": {
+        "@id": "https://stiltnerlandscapes.com/#business"
+      },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://stiltnerlandscapes.com/search?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://stiltnerlandscapes.com/#webpage",
+      "url": "https://stiltnerlandscapes.com",
+      "name": "Stiltner Landscapes - Professional Landscaping Services",
+      "isPartOf": {
+        "@id": "https://stiltnerlandscapes.com/#website"
+      },
+      "about": {
+        "@id": "https://stiltnerlandscapes.com/#business"
+      },
+      "description": "Transform your outdoor space with Stiltner Landscapes. Expert landscape design, hardscaping, lawn care, and more. Free estimates available.",
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://stiltnerlandscapes.com/"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://stiltnerlandscapes.com/faq#faqpage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What areas do you serve?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We serve the greater metropolitan area and surrounding communities within a 50-mile radius."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do you offer free estimates?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes! We offer free, no-obligation estimates for all landscaping projects. Contact us to schedule yours."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are you licensed and insured?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, we are fully licensed and insured for your protection and peace of mind."
+          }
+        }
+      ]
+    }
+  ]
+}
+

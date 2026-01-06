@@ -44,3 +44,6 @@ echo ""
 echo "✅ Frontend deployed successfully!"
 echo "🌐 Visit: https://marketing.stiltnerlandscapes.com"
 
+
+
+

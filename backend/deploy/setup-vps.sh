@@ -58,3 +58,6 @@ echo "4. Get SSL cert: certbot --nginx -d marketing.stiltnerlandscapes.com"
 echo "5. Start the app: pm2 start ecosystem.config.js"
 echo ""
 
+
+
+

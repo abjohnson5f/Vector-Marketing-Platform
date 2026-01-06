@@ -37,3 +37,6 @@ echo "✅ Deployment complete!"
 echo "🌐 API available at: https://marketing.stiltnerlandscapes.com"
 echo ""
 
+
+
+

@@ -9,9 +9,12 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
+      publicDir: 'public',
       build: {
         outDir: 'dist',
         sourcemap: false,
+        // Copy public files to dist
+        copyPublicDir: true,
       },
       plugins: [react()],
       define: {

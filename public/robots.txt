@@ -1,0 +1,41 @@
+# Stiltner Landscapes - robots.txt
+# Allow all search engines to crawl everything
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://stiltnerlandscapes.com/sitemap.xml
+
+# Crawl-delay (optional, remove if you want fastest possible crawling)
+# Crawl-delay: 1
+
+# Block only admin/api paths that shouldn't be indexed
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/static/
+Disallow: /private/
+
+# Allow important assets
+Allow: /images/
+Allow: /assets/
+Allow: /*.css
+Allow: /*.js
+Allow: /*.jpg
+Allow: /*.jpeg
+Allow: /*.png
+Allow: /*.webp
+Allow: /*.svg
+
+# Google-specific
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+# Bing
+User-agent: Bingbot
+Allow: /
+
+# Additional sitemaps (if you have image/video sitemaps)
+# Sitemap: https://stiltnerlandscapes.com/sitemap-images.xml
+

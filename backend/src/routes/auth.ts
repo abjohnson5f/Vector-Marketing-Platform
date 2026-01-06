@@ -18,6 +18,16 @@ const GOOGLE_SCOPES = [
   'profile',
 ].join(' ');
 
+// Google Search Console + Indexing API scopes (for SEO features)
+const GOOGLE_SEARCH_CONSOLE_SCOPES = [
+  'https://www.googleapis.com/auth/indexing',           // Submit URLs for indexing
+  'https://www.googleapis.com/auth/webmasters',         // Search Console full access
+  'https://www.googleapis.com/auth/webmasters.readonly', // Search Console read
+  'openid',
+  'email',
+  'profile',
+].join(' ');
+
 // Meta OAuth scopes
 const META_SCOPES = [
   'ads_read',
@@ -50,9 +60,13 @@ auth.get('/google', async (c) => {
 auth.get('/google/callback', async (c) => {
   const code = c.req.query('code');
   const error = c.req.query('error');
+  const state = c.req.query('state') || '';
+  
+  // Check if this is a Search Console OAuth flow
+  const isSearchConsole = state.startsWith('sc_');
   
   if (error) {
-    logger.error({ error }, 'Google OAuth error');
+    logger.error({ error, isSearchConsole }, 'Google OAuth error');
     return c.html(`
       <!DOCTYPE html>
       <html>
@@ -70,7 +84,7 @@ auth.get('/google/callback', async (c) => {
           <div class="card">
             <div class="icon">❌</div>
             <h1>Connection Failed</h1>
-            <p>Google authentication was cancelled or failed. Please try again.</p>
+            <p>${isSearchConsole ? 'Search Console' : 'Google'} authentication was cancelled or failed. Please try again.</p>
           </div>
         </body>
       </html>
@@ -121,9 +135,10 @@ auth.get('/google/callback', async (c) => {
     
     // Store integration
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+    const platform = isSearchConsole ? 'search_console' : 'google_ads';
     
     await db.insert(integrations).values({
-      platform: 'google_ads',
+      platform,
       accountId: userInfo.email,
       accountName: userInfo.name || userInfo.email,
       status: 'connected',
@@ -141,9 +156,38 @@ auth.get('/google/callback', async (c) => {
       },
     });
     
-    logger.info({ email: userInfo.email }, 'Google OAuth connected');
+    logger.info({ email: userInfo.email, platform }, 'Google OAuth connected');
     
-    // Return success page (no frontend deployed yet)
+    // Return success page based on flow type
+    if (isSearchConsole) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Search Console Connected</title>
+            <style>
+              body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #34d399 0%, #059669 100%); }
+              .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; max-width: 400px; }
+              .icon { font-size: 4rem; margin-bottom: 1rem; }
+              h1 { color: #1a1a2e; margin: 0 0 0.5rem; }
+              p { color: #666; margin: 0; }
+              .account { background: #f0f4f8; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-top: 1.5rem; font-size: 0.9rem; color: #333; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="icon">✅</div>
+              <h1>Search Console Connected!</h1>
+              <p>You can now submit URLs for instant Google indexing.</p>
+              <div class="account">${userInfo.email}</div>
+              <p style="margin-top: 1rem; font-size: 0.9rem; color: #666;">You can close this window.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+    
+    // Return success page for Google Ads
     return c.html(`
       <!DOCTYPE html>
       <html>
@@ -174,6 +218,28 @@ auth.get('/google/callback', async (c) => {
     if (err instanceof IntegrationError) throw err;
     throw new IntegrationError('Google authentication failed', 'google');
   }
+});
+
+// ============== Google Search Console OAuth (for Indexing API) ==============
+
+auth.get('/google/search-console', async (c) => {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_REDIRECT_URI) {
+    throw new ValidationError('Google OAuth is not configured');
+  }
+  
+  // Use same callback URI but with special state to identify this flow
+  const state = 'sc_' + nanoid();
+  
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', env.GOOGLE_REDIRECT_URI); // Same redirect URI
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', GOOGLE_SEARCH_CONSOLE_SCOPES);
+  authUrl.searchParams.set('access_type', 'offline');
+  authUrl.searchParams.set('prompt', 'consent');
+  authUrl.searchParams.set('state', state);
+  
+  return c.redirect(authUrl.toString());
 });
 
 // ============== Meta OAuth ==============
@@ -336,14 +402,15 @@ auth.get('/meta/callback', async (c) => {
 auth.delete('/:platform', async (c) => {
   const platform = c.req.param('platform');
   
-  if (!['google', 'meta', 'ga4'].includes(platform)) {
+  if (!['google', 'meta', 'ga4', 'search_console'].includes(platform)) {
     throw new ValidationError('Invalid platform');
   }
   
-  const platformMap: Record<string, 'google_ads' | 'meta_ads' | 'ga4'> = {
+  const platformMap: Record<string, string> = {
     google: 'google_ads',
     meta: 'meta_ads',
     ga4: 'ga4',
+    search_console: 'search_console',
   };
   
   await db.update(integrations)
